@@ -12,6 +12,19 @@ import (
 	"github.com/spf13/viper"
 )
 
+// RunResult contains the outcome summary for a single plugin execution.
+type RunResult struct {
+	Plugin     string `json:"plugin"          yaml:"plugin"`
+	Service    string `json:"service"         yaml:"service"`
+	Successful bool   `json:"successful"      yaml:"successful"`
+	Error      string `json:"error,omitempty" yaml:"error,omitempty"`
+}
+
+// RunSummary is the top-level object printed to stdout at the end of a run.
+type RunSummary struct {
+	Results []RunResult `json:"results" yaml:"results"`
+}
+
 // PluginError retains an error object and the name of the pack that generated it.
 type PluginError struct {
 	Plugin string

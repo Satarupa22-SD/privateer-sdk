@@ -23,14 +23,15 @@ const (
 )
 
 // Run executes all plugins with handling for the command line.
-func Run(logger hclog.Logger, getPlugins func() []*PluginPkg) (exitCode int) {
+// It returns an exit code and a summary of results for each plugin that was executed.
+func Run(logger hclog.Logger, getPlugins func() []*PluginPkg) (exitCode int, results []RunResult) {
 	logger.Trace(fmt.Sprintf(
 		"Using bin: %s", viper.GetString("binaries-path")))
 
 	plugins := getPlugins()
 	if len(plugins) == 0 {
 		logger.Error(fmt.Sprintf("no plugins were requested in config: %s", viper.GetString("binaries-path")))
-		return NoTests
+		return NoTests, nil
 	}
 
 	// Run all plugins
@@ -41,7 +42,7 @@ func Run(logger hclog.Logger, getPlugins func() []*PluginPkg) (exitCode int) {
 			if pluginPkg.Name == servicePluginName {
 				if !pluginPkg.Installed {
 					logger.Error(fmt.Sprintf("requested plugin that is not installed: %s", pluginPkg.Name))
-					return BadUsage
+					return BadUsage, nil
 				}
 				runCount++
 				client := newClient(pluginPkg.Command, logger)
@@ -51,7 +52,7 @@ func Run(logger hclog.Logger, getPlugins func() []*PluginPkg) (exitCode int) {
 				if err != nil {
 					logger.Error(fmt.Sprintf("internal error while initializing %s RPC client: %s", serviceName, err))
 					pluginPkg.closeClient(serviceName, client, logger)
-					return InternalError
+					return InternalError, nil
 				}
 				// Request the plugin
 				var rawPlugin interface{}
@@ -59,7 +60,7 @@ func Run(logger hclog.Logger, getPlugins func() []*PluginPkg) (exitCode int) {
 				if err != nil {
 					logger.Error(fmt.Sprintf("internal error while dispensing RPC client: %s", err.Error()))
 					pluginPkg.closeClient(serviceName, client, logger)
-					return InternalError
+					return InternalError, nil
 				}
 				// Execute plugin
 				plugin := rawPlugin.(shared.Pluginer)
@@ -72,10 +73,20 @@ func Run(logger hclog.Logger, getPlugins func() []*PluginPkg) (exitCode int) {
 					pluginPkg.Successful = true
 				}
 				pluginPkg.closeClient(serviceName, client, logger)
+
+				r := RunResult{
+					Plugin:     pluginPkg.Name,
+					Service:    serviceName,
+					Successful: pluginPkg.Successful,
+				}
+				if pluginPkg.Error != nil {
+					r.Error = pluginPkg.Error.Error()
+				}
+				results = append(results, r)
 			}
 		}
 	}
-	return exitCode
+	return exitCode, results
 }
 
 // newClient handles the lifecycle of a plugin application.
